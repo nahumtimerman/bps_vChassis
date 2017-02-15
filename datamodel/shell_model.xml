@@ -1,0 +1,19 @@
+<Shell>
+    <ShellAttributes>
+    </ShellAttributes>
+    <ShellModel Family="Virtual Traffic Generator Chassis">
+        <ResourceModel Name="Ixia Breaking Point Chassis" Description="" SupportsConcurrentCommands="false">
+            <AttachedAttributes>
+            </AttachedAttributes>
+            <AttributeValues>
+                <AttributeValue Name="User" Value=""/>
+                <AttributeValue Name="Password" Value=""/>
+            </AttributeValues>
+            <ParentModels/>
+            <Drivers>
+                <DriverName>IxiaBreakingpointVchassisDriver</DriverName>
+            </Drivers>
+            <Scripts/>
+        </ResourceModel>
+    </ShellModel>
+</Shell>
