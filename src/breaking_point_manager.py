@@ -1,5 +1,9 @@
 import json
 import sys
+from retrying import retry
+
+RETRY_SECOND = 1000
+RETRY_MINUTE = RETRY_SECOND * 60
 
 import requests
 
@@ -43,6 +47,7 @@ class BPS:
         self.session = requests.Session()
         self.session.mount('https://', MyAdapter())
 
+    @retry(stop_max_delay=RETRY_MINUTE * 5, wait_fixed=RETRY_SECOND * 15)
     def login(self, enable_request_prints=False):
         service = 'https://' + self.ip_string + '/api/v1/auth/session'
         headers = {'content-type': 'application/json'}
@@ -53,9 +58,9 @@ class BPS:
         if r.status_code == 200:
             print 'Login successful. Welcome ' + self.username
         else:
-            print r.status_code
-            print r.content
+            raise Exception('{0}: Failed to logon chassis {1}:\n{2}'.format(r.status_code, self.ip_string, r.content))
 
+    @retry(stop_max_delay=RETRY_MINUTE * 5, wait_fixed=RETRY_SECOND * 15)
     def assign_slots(self, host, vm_name, slot_id, number_of_test_nics, enable_request_prints=False):
         request = get_assign_slot_request(host, vm_name, slot_id, number_of_test_nics)
         service = 'https://' + self.ip_string + '/api/v1/admin/vmdeployment/controller/assignSlotsToController'
@@ -68,4 +73,6 @@ class BPS:
         if r.status_code == 200:
             print 'Assign slot successful.'
         else:
-            raise Exception('{0}: Failed to assign {1} to chassis {2}:\n{3}'.format(r.status_code, vm_name, self.ip_string, r.content))
+            raise Exception(
+                '{0}: Failed to assign {1} to chassis {2}:\n{3}'.format(r.status_code, vm_name, self.ip_string,
+                                                                        r.content))

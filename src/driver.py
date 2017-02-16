@@ -1,6 +1,7 @@
 import cPickle
 import json
 
+
 from cloudshell.api.cloudshell_api import CloudShellAPISession
 from cloudshell.shell.core.driver_context import InitCommandContext, ResourceCommandContext, AutoLoadCommandContext, \
     AutoLoadDetails

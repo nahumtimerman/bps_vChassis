@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TopologyInfo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Details Name="Sample Breaking Point Deployment" Alias="Sample Breaking Point Deployment" Driver="Python Setup &amp; Teardown" SetupDuration="10" TeardownDuration="10" Public="false" DefaultDuration="30360">
+    <Description>Blueprint with preconfigured setup &amp; teardown processes.Deploys Apps and resolves connections on Setup, and deletes App VMs on Teardown</Description>
+    <Categories />
+    <Scripts>
+      <Script Name="Default Sandbox Setup" />
+      <Script Name="Default Sandbox Teardown" />
+    </Scripts>
+    <Diagram Zoom="1" NodeSize="Medium" />
+  </Details>
+  <Apps>
+    <App PositionX="350" PositionY="50" TemplateName="BreakingPointvBlade">
+      <AppResourceInfo Name="BreakingPointvBlade">
+        <AppResources>
+          <AppResource ModelName="Ixia BreakingPoint Module" Driver="IxiaBreakingpointVeVbladeDriver">
+            <Attributes>
+              <Attribute Name="Password" Value="YsvV9ORJpYnYcSy5Lh1gYg==" />
+              <Attribute Name="User" Value="admin" />
+              <Attribute Name="Virtual Traffic Generator Chassis" Value="myChassis" />
+            </Attributes>
+          </AppResource>
+        </AppResources>
+        <DeploymentPaths>
+          <DeploymentPath Name="vCenter - vCenter VM From Image" Default="true">
+            <DeploymentService Name="vCenter VM From Image" CloudProvider="vCenter">
+              <Attributes>
+                <Attribute Name="Default Datacenter" Value="" />
+                <Attribute Name="Auto Power Off" Value="True" />
+                <Attribute Name="Auto Power On" Value="True" />
+                <Attribute Name="Wait for IP" Value="True" />
+                <Attribute Name="VM Cluster" Value="" />
+                <Attribute Name="VM Location" Value="" />
+                <Attribute Name="VM Storage" Value="" />
+                <Attribute Name="VM Resource Pool" Value="" />
+                <Attribute Name="vCenter Image" Value="C:\Users\nahum-t\Documents\Ixia\BreakingPoint\Ixia_BreakingPoint_Virtual_Blade_8.20.8_EA_ESXi.ova" />
+                <Attribute Name="vCenter Image Arguments" Value="--net:Management Network=Vlan73 only for elad, --net:Test Network 1=HOLDING, --net:Test Network 2=HOLDING" />
+                <Attribute Name="IP Regex" Value="" />
+                <Attribute Name="Refresh IP Timeout" Value="600" />
+                <Attribute Name="Auto Delete" Value="True" />
+                <Attribute Name="Autoload" Value="True" />
+              </Attributes>
+            </DeploymentService>
+          </DeploymentPath>
+        </DeploymentPaths>
+      </AppResourceInfo>
+    </App>
+    <App PositionX="825" PositionY="255" TemplateName="BreakingPointvChassis">
+      <AppResourceInfo Name="myChassis">
+        <AppResources>
+          <AppResource ModelName="Ixia Breaking Point Chassis" Driver="IxiaBreakingpointVchassisDriver">
+            <Attributes>
+              <Attribute Name="Password" Value="DxTbqlSgAVPmrDLlHvJrsA==" />
+              <Attribute Name="User" Value="admin" />
+            </Attributes>
+          </AppResource>
+        </AppResources>
+        <DeploymentPaths>
+          <DeploymentPath Name="vCenter - vCenter VM From Image" Default="true">
+            <DeploymentService Name="vCenter VM From Image" CloudProvider="vCenter">
+              <Attributes>
+                <Attribute Name="Default Datacenter" Value="" />
+                <Attribute Name="Auto Power Off" Value="True" />
+                <Attribute Name="Auto Power On" Value="True" />
+                <Attribute Name="Wait for IP" Value="True" />
+                <Attribute Name="VM Cluster" Value="" />
+                <Attribute Name="VM Location" Value="" />
+                <Attribute Name="VM Storage" Value="" />
+                <Attribute Name="VM Resource Pool" Value="" />
+                <Attribute Name="vCenter Image" Value="C:\Users\nahum-t\Documents\Ixia\BreakingPoint\Ixia_BreakingPoint_Virtual_Controller_8.20.8_EA_ESXi.ova" />
+                <Attribute Name="vCenter Image Arguments" Value="--net:Management Network=Vlan73 only for elad" />
+                <Attribute Name="IP Regex" Value="" />
+                <Attribute Name="Refresh IP Timeout" Value="600" />
+                <Attribute Name="Auto Delete" Value="True" />
+                <Attribute Name="Autoload" Value="True" />
+              </Attributes>
+            </DeploymentService>
+          </DeploymentPath>
+        </DeploymentPaths>
+      </AppResourceInfo>
+    </App>
+  </Apps>
+</TopologyInfo>
