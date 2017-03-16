@@ -9,6 +9,8 @@ from cloudshell.shell.core.resource_driver_interface import ResourceDriverInterf
 # from debug_utils import debugger
 from breaking_point_manager import BPS
 
+ATTR_NUMBER_OF_PORTS = 'Number of Ports'
+
 EXC_ATTRIBUTE_NOT_FOUND = 'Expected resource model {0} to have attribute "{1}" but did not find it'
 
 ASSOCIATED_MODELS = ['Ixia BreakingPoint Module']
@@ -72,14 +74,18 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
                 raise Exception(EXC_ATTRIBUTE_NOT_FOUND.format(deployed_app.ResourceModelName, ATTR_OWNER_CHASSIS))
 
             if chassis_name == self.app_request['name']:
+                number_of_ports = (attr.Value for attr in deployed_app.ResourceAttributes if attr.Name == ATTR_NUMBER_OF_PORTS).next()
                 host = api.GetResourceDetails(deployed_app.Name).Address
                 bps.assign_slots(host=host,
                                  vm_name=deployed_app.Name,
                                  slot_id=str(slot_id),
-                                 number_of_test_nics=2)
+                                 number_of_test_nics=int(number_of_ports))
                 slot_id += 1
 
-                # stub for licensing
+            self._set_licensing(context)
+
+    def _set_licensing(self, context):
+        # stub for licensing
         pass
 
     def _get_api_from_context(self, context):
@@ -126,7 +132,7 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
 
            return AutoLoadDetails(sub_resources,attributes)
         '''
-        pass
+        return AutoLoadDetails([],[])
 
     # </editor-fold>
 
