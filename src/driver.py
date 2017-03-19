@@ -6,7 +6,12 @@ from cloudshell.api.cloudshell_api import CloudShellAPISession
 from cloudshell.shell.core.driver_context import InitCommandContext, ResourceCommandContext, AutoLoadCommandContext, \
     AutoLoadDetails
 from cloudshell.shell.core.resource_driver_interface import ResourceDriverInterface
-# from debug_utils import debugger
+from bp_controller.runners.bp_runner_pool import BPRunnersPool
+from cloudshell.networking.devices.driver_helper import get_logger_with_thread_id
+from cloudshell.shell.core.driver_context import AutoLoadDetails
+from cloudshell.shell.core.resource_driver_interface import ResourceDriverInterface
+
+from debug_utils import debugger
 from breaking_point_manager import BPS
 
 ATTR_NUMBER_OF_PORTS = 'Number of Ports'
@@ -26,7 +31,7 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
         """
         ctor must be without arguments, it is created with reflection at run time
         """
-        pass
+        self._runners_pool = BPRunnersPool()
 
     def initialize(self, context):
         """
@@ -48,7 +53,7 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
         #  which only includes such resources
         # chassis will become associated with vBlades that were deployed but not preexisting
 
-        # debugger.attach_debugger()
+        debugger.attach_debugger()
         resources = cPickle.loads(resource_cache)
 
         ip = context.resource.address
@@ -75,11 +80,16 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
 
             if chassis_name == self.app_request['name']:
                 number_of_ports = (attr.Value for attr in deployed_app.ResourceAttributes if attr.Name == ATTR_NUMBER_OF_PORTS).next()
-                host = api.GetResourceDetails(deployed_app.Name).Address
-                bps.assign_slots(host=host,
+                vblade_res = api.GetResourceDetails(deployed_app.Name)
+                vblade_res_host = vblade_res.Address
+                bps.assign_slots(host=vblade_res_host,
                                  vm_name=deployed_app.Name,
                                  slot_id=str(slot_id),
                                  number_of_test_nics=int(number_of_ports))
+                for resource in vblade_res.ChildResources:
+                    # chassis  ip  i.e. THIS resource not vblade ip/ slot num / port num
+                    new_address = '{0}/{1}/{2}'.format(context.resource.address, 'M' + str(slot_id), 'P' + str(int(resource.Address) - 1))
+                    api.UpdateResourceAddress(resource.Name, new_address)
                 slot_id += 1
 
             self._set_licensing(context)
@@ -135,6 +145,51 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
         return AutoLoadDetails([],[])
 
     # </editor-fold>
+
+    def load_config(self, context, config_file_location):
+        debugger.attach_debugger()
+        with self._runners_pool.actual_runner(context) as runner:
+            return runner.load_configuration(config_file_location)
+
+    # def send_arp(self, context):
+    #     """ Send ARP for all objects (ports, devices, streams)
+    #     :param context: the context the command runs on
+    #     :type context: cloudshell.shell.core.driver_context.ResourceRemoteCommandContext
+    #     """
+    #     pass
+
+    def start_traffic(self, context, blocking):
+        """
+        :param context: the context the command runs on
+        :type context: cloudshell.shell.core.driver_context.ResourceRemoteCommandContext
+        :param blocking:
+        """
+        with self._runners_pool.actual_runner(context) as runner:
+            return runner.start_traffic(blocking)
+
+    def stop_traffic(self, context):
+        """
+        :param context: the context the command runs on
+        :type context: cloudshell.shell.core.driver_context.ResourceRemoteCommandContext
+        """
+        with self._runners_pool.actual_runner(context) as runner:
+            return runner.stop_traffic()
+
+    def get_statistics(self, context, view_name, output_type):
+        with self._runners_pool.actual_runner(context) as runner:
+            return runner.get_statistics(view_name, output_type)
+
+    def keep_alive(self, context, cancellation_context):
+        # logger = get_logger_with_thread_id(context)
+        # logger.debug(context)
+        # if hasattr(context, 'reservation'):
+        #     logger.debug('KEEPALIVE_RESERVATION {}'.format(context.reservation.reservation_id))
+        # while not cancellation_context.is_cancelled:
+        #     pass
+        # if cancellation_context.is_cancelled:
+        #     raise Exception(self.__class__.__name__, 'Keepalive canceled, {}'.format(context))
+        pass
+
 
     def cleanup(self):
         """
