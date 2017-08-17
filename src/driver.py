@@ -1,7 +1,6 @@
 import cPickle
 import json
 
-
 from cloudshell.api.cloudshell_api import CloudShellAPISession
 from cloudshell.shell.core.driver_context import InitCommandContext, ResourceCommandContext, AutoLoadCommandContext, \
     AutoLoadDetails
@@ -11,7 +10,6 @@ from cloudshell.networking.devices.driver_helper import get_logger_with_thread_i
 from cloudshell.shell.core.driver_context import AutoLoadDetails
 from cloudshell.shell.core.resource_driver_interface import ResourceDriverInterface
 
-from debug_utils import debugger
 from breaking_point_manager import BPS
 
 ATTR_NUMBER_OF_PORTS = 'Number of Ports'
@@ -20,9 +18,6 @@ EXC_ATTRIBUTE_NOT_FOUND = 'Expected resource model {0} to have attribute "{1}" b
 
 ASSOCIATED_MODELS = ['Ixia BreakingPoint Module']
 ATTR_OWNER_CHASSIS = 'Virtual Traffic Generator Chassis'
-
-
-# todo Handle slot id not arbitrarily - sort by attribute or some other rule
 
 
 # noinspection PyAttributeOutsideInit
@@ -53,8 +48,12 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
         #  which only includes such resources
         # chassis will become associated with vBlades that were deployed but not preexisting
 
-        debugger.attach_debugger()
         resources = cPickle.loads(resource_cache)
+
+        if 'License Server' not in context.resource.attributes:
+            raise Exception('Missing attribute "License Server" on {0}'.format(context.resource.name))
+        if context.resource.attributes['License Server'] == '':
+            raise Exception('Must configure public IP of Breaking Point license server on {0}'.format(context.resource.name))
 
         ip = context.resource.address
         username = context.resource.attributes['User']
@@ -62,10 +61,15 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
         password = api.DecryptPassword(context.resource.attributes['Password']).Value
 
         bps = BPS(ip, username, password)
-        bps.login()
+        bps.login_rest()
 
-        slot_id = 1
+        free_slots = [x + 1 for x in range(11)]
 
+        vblades = []
+        slot_id = 0
+
+        # first get all vblades and check who is already assigned to a slot;
+        # this will give priority to assigning vblade to slot above arbitrarily assigning a slot
         for key in resources.keys():
             deployed_app = resources[key]
 
@@ -79,20 +83,46 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
                 raise Exception(EXC_ATTRIBUTE_NOT_FOUND.format(deployed_app.ResourceModelName, ATTR_OWNER_CHASSIS))
 
             if chassis_name == self.app_request['name']:
-                number_of_ports = (attr.Value for attr in deployed_app.ResourceAttributes if attr.Name == ATTR_NUMBER_OF_PORTS).next()
                 vblade_res = api.GetResourceDetails(deployed_app.Name)
-                vblade_res_host = vblade_res.Address
-                bps.assign_slots(host=vblade_res_host,
-                                 vm_name=deployed_app.Name,
-                                 slot_id=str(slot_id),
-                                 number_of_test_nics=int(number_of_ports))
-                for resource in vblade_res.ChildResources:
-                    # chassis  ip  i.e. THIS resource not vblade ip/ slot num / port num
-                    new_address = '{0}/{1}/{2}'.format(context.resource.address, 'M' + str(slot_id), 'P' + str(int(resource.Address) - 1))
-                    api.UpdateResourceAddress(resource.Name, new_address)
-                slot_id += 1
+                requested_slot = (int(attr.Value) for attr in vblade_res.ResourceAttributes if
+                              attr.Name == 'Slot Id').next()
+                if requested_slot != 0 and requested_slot in free_slots:
+                    slot_id = self._user_assign_slot(free_slots, requested_slot)
+                    vblade_res.slot_id = slot_id
+                vblades.append(vblade_res)
 
-            self._set_licensing(context)
+        # ok, now we can assign vblades to slot, and assign addresses to ports
+        for vblade in vblades:
+            number_of_ports = (attr.Value for attr in vblade.ResourceAttributes
+                               if attr.Name == ATTR_NUMBER_OF_PORTS).next()
+
+            if not hasattr(vblade, 'slot_id'):
+                slot_id = self._automatic_assign_port(api, free_slots, vblade_res)
+            else:
+                slot_id = vblade.slot_id
+
+            bps.assign_slots(host=vblade.Address,
+                             vm_name=vblade.Name,
+                             slot_id=str(slot_id),
+                             number_of_test_nics=int(number_of_ports))
+
+            for resource in vblade.ChildResources:
+                # chassis  ip  i.e. THIS resource not vblade ip/ slot num / port num
+                new_address = '{0}/{1}/{2}'.format(context.resource.address,
+                                                   'M' + str(slot_id), 'P' + str(int(resource.Address) - 1))
+                api.UpdateResourceAddress(resource.Name, new_address)
+
+        bps.logout_rest()
+        bps.add_license_server(license_server_host=context.resource.attributes['License Server'])
+
+    def _user_assign_slot(self, free_slots, requested_slot):
+        free_slots.remove(requested_slot)
+        return requested_slot
+
+    def _automatic_assign_port(self, api, free_slots, vblade_res):
+        slot_id = free_slots.pop(0)
+        api.SetAttributeValue(vblade_res.Name, 'Slot Id', str(slot_id))
+        return slot_id
 
     def _set_licensing(self, context):
         # stub for licensing
@@ -116,47 +146,13 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
         # See below some example code demonstrating how to return the resource structure
         # and attributes. In real life, of course, if the actual values are not static,
         # this code would be preceded by some SNMP/other calls to get the actual resource information
-        '''
-           # Add sub resources details
-           sub_resources = [ AutoLoadResource(model ='Generic Chassis',name= 'Chassis 1', relative_address='1'),
-           AutoLoadResource(model='Generic Module',name= 'Module 1',relative_address= '1/1'),
-           AutoLoadResource(model='Generic Port',name= 'Port 1', relative_address='1/1/1'),
-           AutoLoadResource(model='Generic Port', name='Port 2', relative_address='1/1/2'),
-           AutoLoadResource(model='Generic Power Port', name='Power Port', relative_address='1/PP1')]
-
-
-           attributes = [ AutoLoadAttribute(relative_address='', attribute_name='Location', attribute_value='Santa Clara Lab'),
-                          AutoLoadAttribute('', 'Model', 'Catalyst 3850'),
-                          AutoLoadAttribute('', 'Vendor', 'Cisco'),
-                          AutoLoadAttribute('1', 'Serial Number', 'JAE053002JD'),
-                          AutoLoadAttribute('1', 'Model', 'WS-X4232-GB-RJ'),
-                          AutoLoadAttribute('1/1', 'Model', 'WS-X4233-GB-EJ'),
-                          AutoLoadAttribute('1/1', 'Serial Number', 'RVE056702UD'),
-                          AutoLoadAttribute('1/1/1', 'MAC Address', 'fe80::e10c:f055:f7f1:bb7t16'),
-                          AutoLoadAttribute('1/1/1', 'IPv4 Address', '192.168.10.7'),
-                          AutoLoadAttribute('1/1/2', 'MAC Address', 'te67::e40c:g755:f55y:gh7w36'),
-                          AutoLoadAttribute('1/1/2', 'IPv4 Address', '192.168.10.9'),
-                          AutoLoadAttribute('1/PP1', 'Model', 'WS-X4232-GB-RJ'),
-                          AutoLoadAttribute('1/PP1', 'Port Description', 'Power'),
-                          AutoLoadAttribute('1/PP1', 'Serial Number', 'RVE056702UD')]
-
-           return AutoLoadDetails(sub_resources,attributes)
-        '''
-        return AutoLoadDetails([],[])
+        return AutoLoadDetails([], [])
 
     # </editor-fold>
 
     def load_config(self, context, config_file_location):
-        debugger.attach_debugger()
         with self._runners_pool.actual_runner(context) as runner:
             return runner.load_configuration(config_file_location)
-
-    # def send_arp(self, context):
-    #     """ Send ARP for all objects (ports, devices, streams)
-    #     :param context: the context the command runs on
-    #     :type context: cloudshell.shell.core.driver_context.ResourceRemoteCommandContext
-    #     """
-    #     pass
 
     def start_traffic(self, context, blocking):
         """
@@ -178,18 +174,6 @@ class IxiaBreakingpointVchassisDriver(ResourceDriverInterface):
     def get_statistics(self, context, view_name, output_type):
         with self._runners_pool.actual_runner(context) as runner:
             return runner.get_statistics(view_name, output_type)
-
-    def keep_alive(self, context, cancellation_context):
-        # logger = get_logger_with_thread_id(context)
-        # logger.debug(context)
-        # if hasattr(context, 'reservation'):
-        #     logger.debug('KEEPALIVE_RESERVATION {}'.format(context.reservation.reservation_id))
-        # while not cancellation_context.is_cancelled:
-        #     pass
-        # if cancellation_context.is_cancelled:
-        #     raise Exception(self.__class__.__name__, 'Keepalive canceled, {}'.format(context))
-        pass
-
 
     def cleanup(self):
         """

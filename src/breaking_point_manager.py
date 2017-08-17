@@ -1,18 +1,17 @@
 import json
-import sys
 from retrying import retry
 
-RETRY_SECOND = 1000
-RETRY_MINUTE = RETRY_SECOND * 60
-
 import requests
-
+from ssh_interactive_session.bpsh_run_command import run_cmd
 from requests_manager import get_assign_slot_request
 
 requests.packages.urllib3.disable_warnings()
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.poolmanager import PoolManager
 import ssl
+
+RETRY_SECOND = 1000
+RETRY_MINUTE = RETRY_SECOND * 60
 
 
 class MyAdapter(HTTPAdapter):
@@ -47,8 +46,8 @@ class BPS:
         self.session = requests.Session()
         self.session.mount('https://', MyAdapter())
 
-    @retry(stop_max_delay=RETRY_MINUTE * 5, wait_fixed=RETRY_SECOND * 15)
-    def login(self, enable_request_prints=False):
+    @retry(stop_max_delay=RETRY_MINUTE * 10, wait_fixed=RETRY_SECOND * 60)
+    def login_rest(self, enable_request_prints=False):
         service = 'https://' + self.ip_string + '/api/v1/auth/session'
         headers = {'content-type': 'application/json'}
         data = json.dumps({'username': self.username, 'password': self.password})
@@ -59,6 +58,9 @@ class BPS:
             print 'Login successful. Welcome ' + self.username
         else:
             raise Exception('{0}: Failed to logon chassis {1}:\n{2}'.format(r.status_code, self.ip_string, r.content))
+
+    def logout_rest(self):
+        self.session = None
 
     @retry(stop_max_delay=RETRY_MINUTE * 5, wait_fixed=RETRY_SECOND * 15)
     def assign_slots(self, host, vm_name, slot_id, number_of_test_nics, enable_request_prints=False):
@@ -76,3 +78,10 @@ class BPS:
             raise Exception(
                 '{0}: Failed to assign {1} to chassis {2}:\n{3}'.format(r.status_code, vm_name, self.ip_string,
                                                                         r.content))
+
+    def add_license_server(self, license_server_host):
+        cmd = '$bps iluAddLicenseServers {0}'.format(license_server_host)
+        run_cmd(cmd, self.ip_string, self.username, self.password)
+
+
+
